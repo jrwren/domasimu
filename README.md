@@ -14,6 +14,16 @@ domasimu is a command line tool that enables reading and management of dnsimple 
 
 Installation
 ------------
+Until a PR is merged, building from source is #dicey.
+
+    $ go get github.com/jrwren/domasimu/...
+    # ignore the errors
+    $ go get github.com/jrwren/dnsimple/
+    $ sed -i  's|"github.com/pearkes/dnsimple|"github.com/jrwren/dnsimple|' \
+        $(find $GOPATH/src/github.com/jrwren/domasimu -name '*.go')
+    $ go install github.com/jrwren/domasimu/...
+    
+Someday:
 
     $ go get github.com/jrwren/domasimu/...
     $ go install github.com/jrwren/domasimu/...
