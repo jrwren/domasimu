@@ -1,3 +1,7 @@
+language: go
+go:
+  - 1.6
+  - tip
 install:
   - go get github.com/BurntSushi/toml
-	- go get github.com/pearkes/dnsimple
+  - go get github.com/pearkes/dnsimple
