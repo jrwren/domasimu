@@ -35,31 +35,22 @@ For example, to add 3 A records for www and then change one of them:
 Installation
 ------------
 
-~~$ go get github.com/jrwren/domasimu/...
-$ go install github.com/jrwren/domasimu/...~~
-
-Until a PR is merged, building from source is #dicey.
-
-    $ go get github.com/jrwren/domasimu/...
-    # ignore the errors
-    $ go get github.com/jrwren/dnsimple/
-    $ sed -i  's|"github.com/pearkes/dnsimple|"github.com/jrwren/dnsimple|' \
-        $(find $GOPATH/src/github.com/jrwren/domasimu -name '*.go')
-    $ go install github.com/jrwren/domasimu/...
+$ go get -u github.com/jrwren/domasimu/...
+$ go install github.com/jrwren/domasimu/...
 
 
 Configuration
 -------------
 
-    $ echo 'user = "youraccount@example.com' > ~/.domasimurc
     $ echo 'token = "YOURTOKENGOESHERE_YESQUOTED"' >> ~/.domasimurc
+    
+Get your token by visiting https://dnsimple.com/user and clicking `+ New access token`
 
 Alternate Configuration
 -----------------------
 domasimu will read config from a different file if DOMASIMU_CONF environment variable is set.
 
     $ DOMASIMU_CONF="alt-domasimurc"
-    $ echo 'user = "yourotheraccount@example.com' > $DOMASIMU_CONF
     $ echo 'token = "YOURTOKENGOESHERE_YESQUOTED"' >> $DOMASIMU_CONF
     $ domasimu -l
     moardomains.org
