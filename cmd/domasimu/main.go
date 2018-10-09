@@ -47,6 +47,11 @@ func main() {
 		fmt.Fprintln(os.Stderr, "could not connect to dnsimple", err)
 		return
 	}
+
+	if whoamiResponse.Data.Account == nil {
+		fmt.Fprintln(os.Stderr, "you need to use account token instead of user token")
+		return
+	}
 	accountID := strconv.FormatInt(whoamiResponse.Data.Account.ID, 10)
 
 	if *list {

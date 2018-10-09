@@ -44,7 +44,7 @@ Configuration
 
     $ echo 'token = "YOURTOKENGOESHERE_YESQUOTED"' >> ~/.domasimurc
     
-Get your token by visiting https://dnsimple.com/user and clicking `+ New access token`
+Get your account token by going to `Account -> Automation -> API tokens -> New`
 
 Alternate Configuration
 -----------------------
