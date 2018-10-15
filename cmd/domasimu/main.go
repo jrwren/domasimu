@@ -11,6 +11,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"runtime"
 	"strconv"
 	"strings"
 
@@ -28,7 +29,7 @@ func main() {
 	flag.Usage = func() {
 		fmt.Fprintf(os.Stderr, "Usage of %s:\n", os.Args[0])
 		flag.PrintDefaults()
-		fmt.Fprintln(os.Stderr, ".domasimurc config file example:")
+		fmt.Fprintln(os.Stderr, "domasimu config file example:")
 		toml.NewEncoder(os.Stderr).Encode(Config{"you@example.com", "TOKENHERE1234"})
 	}
 	flag.Parse()
@@ -104,11 +105,26 @@ func main() {
 	}
 }
 
-func getCreds() (string, string, error) {
-	configFileName := os.Getenv("DOMASIMU_CONF")
-	if configFileName == "" {
-		configFileName = filepath.Join(os.Getenv("HOME"), ".domasimurc")
+var configFileName = func() string {
+	if os.Getenv("DOMASIMU_CONF") != "" {
+		return os.Getenv("DOMASIMU_CONF")
 	}
+
+	switch runtime.GOOS {
+	case "windows":
+		return filepath.Join(os.Getenv("LOCALAPPDATA"), "Domasimu", "config")
+	case "darwin":
+		return filepath.Join(os.Getenv("HOME"), "Library", "Application Support", "Domasimu", "config")
+	default:
+		if os.Getenv("XDG_CONFIG_HOME") != "" {
+			return filepath.Join(os.Getenv("XDG_CONFIG_HOME"), "domasimu", "config")
+		} else {
+			return filepath.Join(os.Getenv("HOME"), ".config", "domasimu", "config")
+		}
+	}
+}()
+
+func getCreds() (string, string, error) {
 	var config Config
 	_, err := toml.DecodeFile(configFileName, &config)
 	if err != nil {
