@@ -22,17 +22,24 @@ import (
 
 var verbose = flag.Bool("v", false, "Use verbose output")
 var list = flag.Bool("l", false, "List domains.")
-var update = flag.String("u", "", "Update or create record. The format is 'domain name type oldvalue newvlaue ttl'. Use - for oldvalue to create a new record.")
+var update = flag.String("u", "", "Update or create record. The format is 'domain name type oldvalue newvlaue ttl'.\n(use - for oldvalue to create a new record)")
 var del = flag.String("d", "", "Delete record. The format is 'domain name type value'")
 
 func main() {
 	flag.Usage = func() {
 		fmt.Fprintf(os.Stderr, "Usage of %s:\n", os.Args[0])
 		flag.PrintDefaults()
+		fmt.Println("")
 		fmt.Fprintln(os.Stderr, "domasimu config file example:")
 		toml.NewEncoder(os.Stderr).Encode(Config{"you@example.com", "TOKENHERE1234"})
 	}
 	flag.Parse()
+
+	if len(os.Args) == 1 {
+		flag.Usage()
+		return
+	}
+
 	_, token, err := getCreds()
 	if err != nil {
 		fmt.Fprintln(os.Stderr, "could not read config", err)
@@ -41,9 +48,10 @@ func main() {
 
 	ts := oauth2.StaticTokenSource(&oauth2.Token{AccessToken: token})
 	tc := oauth2.NewClient(context.Background(), ts)
-	client := dnsimple.NewClient(tc)
 
+	client := dnsimple.NewClient(tc)
 	whoamiResponse, err := client.Identity.Whoami()
+
 	if err != nil {
 		fmt.Fprintln(os.Stderr, "could not connect to dnsimple", err)
 		return
@@ -58,7 +66,7 @@ func main() {
 	if *list {
 		domainsResponse, err := client.Domains.ListDomains(accountID, nil)
 		if err != nil {
-			fmt.Fprintf(os.Stderr, "could get domains %v\n", err)
+			fmt.Fprintf(os.Stderr, "could not get domains %v\n", err)
 			return
 		}
 		for _, domain := range domainsResponse.Data {
