@@ -20,7 +20,7 @@ func FormatZoneRecord(zone dnsimple.ZoneRecord, format string) (string, error) {
 		}
 		return string(enc), nil
 	case "table":
-		return fmt.Sprintf("| %-30s | %-5s | %7s | %-30s |\n", zone.Name, zone.Type, zone.TTL, zone.Content), nil
+		return fmt.Sprintf("| %-30s | %-5s | %7d | %-30s |\n", zone.Name, zone.Type, zone.TTL, zone.Content), nil
 	default:
 		return "", fmt.Errorf("invalid format %v", format)
 	}

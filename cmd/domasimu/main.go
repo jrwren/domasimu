@@ -41,7 +41,7 @@ func main() {
 	case "table":
 	case "json":
 	default:
-		fmt.Println(os.Stderr, "could not use specified format", *format)
+		fmt.Fprintln(os.Stderr, "could not use specified format", *format)
 		return
 	}
 
