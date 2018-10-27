@@ -24,6 +24,7 @@ var verbose = flag.Bool("v", false, "Use verbose output")
 var list = flag.Bool("l", false, "List domains.")
 var update = flag.String("u", "", "Update or create record. The format is 'domain name type oldvalue newvlaue ttl'.\n(use - for oldvalue to create a new record)")
 var del = flag.String("d", "", "Delete record. The format is 'domain name type value'")
+var format = flag.String("f", "plain", "Output zones in {plain, json, table} format")
 
 func main() {
 	flag.Usage = func() {
@@ -34,6 +35,15 @@ func main() {
 		toml.NewEncoder(os.Stderr).Encode(Config{"you@example.com", "TOKENHERE1234"})
 	}
 	flag.Parse()
+
+	switch *format {
+	case "plain":
+	case "table":
+	case "json":
+	default:
+		fmt.Println(os.Stderr, "could not use specified format", *format)
+		return
+	}
 
 	if len(os.Args) == 1 {
 		flag.Usage()
@@ -103,13 +113,7 @@ func main() {
 			continue
 		}
 
-		for _, record := range listZoneRecordsResponse.Data {
-			if *verbose {
-				fmt.Println(record.Name, record.Type, record.Content, record.TTL, record.Priority)
-			} else {
-				fmt.Println(record.Name, record.Type, record.Content)
-			}
-		}
+		fmt.Println(FormatZoneRecords(listZoneRecordsResponse.Data, *format))
 	}
 }
 
