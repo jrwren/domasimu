@@ -14,6 +14,7 @@ import (
 	"os"
 	"path/filepath"
 	"runtime"
+	"sort"
 	"strconv"
 	"strings"
 
@@ -113,7 +114,7 @@ func main() {
 	if *typeR != `` {
 		options.Type = *typeR
 	}
-	records := []dnsimple.ZoneRecord{}
+	records := zoneRecords{}
 	for _, domain := range flag.Args() {
 		for p := 1; ; p++ {
 			listZoneRecordsResponse, err := client.Zones.ListRecords(accountID, domain, options)
@@ -137,28 +138,27 @@ func main() {
 	if *verbose {
 		log.Println("found ", len(records), " records")
 	}
-	// TODO: sort records by name here.
-	s, err := FormatZoneRecords(records, *format)
+	sort.Sort(records)
+
+	err = FormatZoneRecords(records, *format)
 	if err != nil {
 		log.Println("error: err")
 	}
-	fmt.Println(s)
 }
 
 // FormatZoneRecords takes a slice of dnsimple.ZoneRecord and formats it in the specified format.
-func FormatZoneRecords(zones []dnsimple.ZoneRecord, format string) (string, error) {
+func FormatZoneRecords(zones []dnsimple.ZoneRecord, format string) error {
 	if format == "json" {
-		enc, err := json.Marshal(zones)
+		err := json.NewEncoder(os.Stdout).Encode(zones)
 		if err != nil {
-			return "", err
+			return err
 		}
-		return string(enc), nil
+		return nil
 	}
-	var ret string
 	if format == "table" {
-		ret += fmt.Sprintf("+-%-30s-+-%-5s-+-%-7s-+-%-30s-+\n", strings.Repeat("-", 30), "-----", "-------", strings.Repeat("-", 30))
-		ret += fmt.Sprintf("%s| %-30s | %-5s | %-7s | %-30s |\n", ret, "Name", "Type", "TTL", "Content")
-		ret += fmt.Sprintf("%s+-%-30s-+-%-5s-+-%-7s-+-%-30s-+\n", ret, strings.Repeat("-", 30), "-----", "-------", strings.Repeat("-", 30))
+		fmt.Printf("+-%-30s-+-%-5s-+-%-7s-+-%-30s-+\n", strings.Repeat("-", 30), "-----", "-------", strings.Repeat("-", 30))
+		fmt.Printf("| %-30s | %-5s | %-7s | %-30s |\n", "Name", "Type", "TTL", "Content")
+		fmt.Printf("+-%-30s-+-%-5s-+-%-7s-+-%-30s-+\n", strings.Repeat("-", 30), "-----", "-------", strings.Repeat("-", 30))
 	}
 	for _, zone := range zones {
 		if zone.Name == `` {
@@ -166,18 +166,30 @@ func FormatZoneRecords(zones []dnsimple.ZoneRecord, format string) (string, erro
 		}
 		switch format {
 		case "plain":
-			ret += fmt.Sprintf("%s %s (%d) %s\n", zone.Name, zone.Type, zone.TTL, zone.Content)
+			if flag.NFlag() > 1 {
+				fmt.Printf("%s %s %s (%d) %s\n", zone.ZoneID, zone.Name, zone.Type, zone.TTL, zone.Content)
+			} else {
+				fmt.Printf("%s %s (%d) %s\n", zone.Name, zone.Type, zone.TTL, zone.Content)
+
+			}
 		case "table":
-			ret += fmt.Sprintf("| %-30s | %-5s | %7d | %-30s |\n", zone.Name, zone.Type, zone.TTL, zone.Content)
+			fmt.Printf("| %-30s | %-5s | %7d | %-30s |\n", zone.Name, zone.Type, zone.TTL, zone.Content)
 		default:
-			return ret, fmt.Errorf("invalid format %v", format)
+			return fmt.Errorf("invalid format %v", format)
 		}
 	}
 	if format == "table" {
-		ret += fmt.Sprintf("%s+-%-30s-+-%-5s-+-%-7s-+-%-30s-+\n", ret, strings.Repeat("-", 30), "-----", "-------", strings.Repeat("-", 30))
+		fmt.Printf("+-%-30s-+-%-5s-+-%-7s-+-%-30s-+\n", strings.Repeat("-", 30), "-----", "-------", strings.Repeat("-", 30))
+
 	}
-	return ret, nil
+	return nil
 }
+
+type zoneRecords []dnsimple.ZoneRecord
+
+func (z zoneRecords) Len() int           { return len(z) }
+func (z zoneRecords) Less(i, j int) bool { return z[i].Name < z[j].Name }
+func (z zoneRecords) Swap(i, j int)      { z[i], z[j] = z[j], z[i] }
 
 var configFileName = func() string {
 	if os.Getenv("DOMASIMU_CONF") != "" {
