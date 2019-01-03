@@ -166,7 +166,9 @@ func FormatZoneRecords(zones []dnsimple.ZoneRecord, format string) error {
 		}
 		switch format {
 		case "plain":
-			if flag.NFlag() > 1 {
+			if *verbose {
+				fmt.Printf("%s %s %s %d (%d) %s %v\n", zone.ZoneID, zone.Name, zone.Type, zone.Priority, zone.TTL, zone.Content, zone.UpdatedAt)
+			} else if flag.NFlag() > 1 {
 				fmt.Printf("%s %s %s (%d) %s\n", zone.ZoneID, zone.Name, zone.Type, zone.TTL, zone.Content)
 			} else {
 				fmt.Printf("%s %s (%d) %s\n", zone.Name, zone.Type, zone.TTL, zone.Content)
