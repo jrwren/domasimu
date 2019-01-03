@@ -7,8 +7,10 @@ package main
 
 import (
 	"context"
+	"encoding/json"
 	"flag"
 	"fmt"
+	"log"
 	"os"
 	"path/filepath"
 	"runtime"
@@ -25,6 +27,7 @@ var list = flag.Bool("l", false, "List domains.")
 var update = flag.String("u", "", "Update or create record. The format is 'domain name type oldvalue newvlaue ttl'.\n(use - for oldvalue to create a new record)")
 var del = flag.String("d", "", "Delete record. The format is 'domain name type value'")
 var format = flag.String("f", "plain", "Output zones in {plain, json, table} format")
+var typeR = flag.String("t", "", "record type to query for")
 
 func main() {
 	flag.Usage = func() {
@@ -106,15 +109,74 @@ func main() {
 		}
 		return
 	}
-	for _, domain := range flag.Args() {
-		listZoneRecordsResponse, err := client.Zones.ListRecords(accountID, domain, nil)
-		if err != nil {
-			fmt.Fprintln(os.Stderr, "could not get records:", err)
-			continue
-		}
-
-		fmt.Println(FormatZoneRecords(listZoneRecordsResponse.Data, *format))
+	options := &dnsimple.ZoneRecordListOptions{}
+	if *typeR != `` {
+		options.Type = *typeR
 	}
+	records := []dnsimple.ZoneRecord{}
+	for _, domain := range flag.Args() {
+		for p := 1; ; p++ {
+			listZoneRecordsResponse, err := client.Zones.ListRecords(accountID, domain, options)
+			if err != nil {
+				fmt.Fprintln(os.Stderr, "could not get records:", err)
+				continue
+			}
+			for i := range listZoneRecordsResponse.Data {
+				records = append(records, listZoneRecordsResponse.Data[i])
+			}
+			if options.Page == 0 {
+				options.Page = 2
+			} else {
+				options.Page++
+			}
+			if p >= listZoneRecordsResponse.Pagination.TotalPages {
+				break
+			}
+		}
+	}
+	if *verbose {
+		log.Println("found ", len(records), " records")
+	}
+	// TODO: sort records by name here.
+	s, err := FormatZoneRecords(records, *format)
+	if err != nil {
+		log.Println("error: err")
+	}
+	fmt.Println(s)
+}
+
+// FormatZoneRecords takes a slice of dnsimple.ZoneRecord and formats it in the specified format.
+func FormatZoneRecords(zones []dnsimple.ZoneRecord, format string) (string, error) {
+	if format == "json" {
+		enc, err := json.Marshal(zones)
+		if err != nil {
+			return "", err
+		}
+		return string(enc), nil
+	}
+	var ret string
+	if format == "table" {
+		ret += fmt.Sprintf("+-%-30s-+-%-5s-+-%-7s-+-%-30s-+\n", strings.Repeat("-", 30), "-----", "-------", strings.Repeat("-", 30))
+		ret += fmt.Sprintf("%s| %-30s | %-5s | %-7s | %-30s |\n", ret, "Name", "Type", "TTL", "Content")
+		ret += fmt.Sprintf("%s+-%-30s-+-%-5s-+-%-7s-+-%-30s-+\n", ret, strings.Repeat("-", 30), "-----", "-------", strings.Repeat("-", 30))
+	}
+	for _, zone := range zones {
+		if zone.Name == `` {
+			zone.Name = `.`
+		}
+		switch format {
+		case "plain":
+			ret += fmt.Sprintf("%s %s (%d) %s\n", zone.Name, zone.Type, zone.TTL, zone.Content)
+		case "table":
+			ret += fmt.Sprintf("| %-30s | %-5s | %7d | %-30s |\n", zone.Name, zone.Type, zone.TTL, zone.Content)
+		default:
+			return ret, fmt.Errorf("invalid format %v", format)
+		}
+	}
+	if format == "table" {
+		ret += fmt.Sprintf("%s+-%-30s-+-%-5s-+-%-7s-+-%-30s-+\n", ret, strings.Repeat("-", 30), "-----", "-------", strings.Repeat("-", 30))
+	}
+	return ret, nil
 }
 
 var configFileName = func() string {
@@ -126,14 +188,28 @@ var configFileName = func() string {
 	case "windows":
 		return filepath.Join(os.Getenv("LOCALAPPDATA"), "Domasimu", "config")
 	case "darwin":
-		return filepath.Join(os.Getenv("HOME"), "Library", "Application Support", "Domasimu", "config")
-	default:
-		if os.Getenv("XDG_CONFIG_HOME") != "" {
-			return filepath.Join(os.Getenv("XDG_CONFIG_HOME"), "domasimu", "config")
-		} else {
-			return filepath.Join(os.Getenv("HOME"), ".config", "domasimu", "config")
+		f := filepath.Join(os.Getenv("HOME"), "Library", "Application Support", "Domasimu", "config")
+		fh, err := os.Open(f)
+		if err == nil {
+			fh.Close()
+			return f
 		}
 	}
+	if os.Getenv("XDG_CONFIG_HOME") != "" {
+		f := filepath.Join(os.Getenv("XDG_CONFIG_HOME"), "domasimu", "config")
+		fh, err := os.Open(f)
+		if err == nil {
+			fh.Close()
+			return f
+		}
+	}
+	f := filepath.Join(os.Getenv("HOME"), ".config", "domasimu", "config")
+	fh, err := os.Open(f)
+	if err == nil {
+		fh.Close()
+		return f
+	}
+	return filepath.Join(os.Getenv("HOME"), ".domasimurc")
 }()
 
 func getCreds() (string, string, error) {
@@ -145,6 +221,7 @@ func getCreds() (string, string, error) {
 	return config.User, config.Token, nil
 }
 
+// Config represents the user and token config for dnsimple.
 type Config struct {
 	User  string
 	Token string
