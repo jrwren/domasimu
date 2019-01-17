@@ -34,6 +34,7 @@ func main() {
 	flag.Usage = func() {
 		fmt.Fprintf(os.Stderr, "Usage of %s:\n", os.Args[0])
 		flag.PrintDefaults()
+		fmt.Println("domasimu <domainname> will list records in the domain")
 		fmt.Println("")
 		fmt.Fprintln(os.Stderr, "domasimu config file example:")
 		toml.NewEncoder(os.Stderr).Encode(Config{"you@example.com", "TOKENHERE1234"})
@@ -114,26 +115,9 @@ func main() {
 	if *typeR != `` {
 		options.Type = *typeR
 	}
-	records := zoneRecords{}
-	for _, domain := range flag.Args() {
-		for p := 1; ; p++ {
-			listZoneRecordsResponse, err := client.Zones.ListRecords(accountID, domain, options)
-			if err != nil {
-				fmt.Fprintln(os.Stderr, "could not get records:", err)
-				continue
-			}
-			for i := range listZoneRecordsResponse.Data {
-				records = append(records, listZoneRecordsResponse.Data[i])
-			}
-			if options.Page == 0 {
-				options.Page = 2
-			} else {
-				options.Page++
-			}
-			if p >= listZoneRecordsResponse.Pagination.TotalPages {
-				break
-			}
-		}
+	records, err := listRecords(client, accountID, flag.Args()[0], options)
+	if err != nil {
+		fmt.Fprintln(os.Stderr, "could not get records:", err)
 	}
 	if *verbose {
 		log.Println("found ", len(records), " records")
@@ -144,6 +128,32 @@ func main() {
 	if err != nil {
 		log.Println("error: err")
 	}
+}
+
+// listRecords pages through records
+func listRecords(client *dnsimple.Client, accountID, domain string,
+	options *dnsimple.ZoneRecordListOptions) (records zoneRecords, err error) {
+	if options == nil {
+		options = &dnsimple.ZoneRecordListOptions{}
+	}
+	for p := 1; ; p++ {
+		listZoneRecordsResponse, err := client.Zones.ListRecords(accountID, domain, options)
+		if err != nil {
+			return nil, err
+		}
+		for i := range listZoneRecordsResponse.Data {
+			records = append(records, listZoneRecordsResponse.Data[i])
+		}
+		if options.Page == 0 {
+			options.Page = 2
+		} else {
+			options.Page++
+		}
+		if p >= listZoneRecordsResponse.Pagination.TotalPages {
+			break
+		}
+	}
+	return
 }
 
 // FormatZoneRecords takes a slice of dnsimple.ZoneRecord and formats it in the specified format.
@@ -308,12 +318,16 @@ func deleteRecord(client *dnsimple.Client, message, accountID string) (string, e
 }
 
 func getRecordIDByValue(client *dnsimple.Client, domain, value, accountID string, changeRecord *dnsimple.ZoneRecord) (int64, error) {
-	recordResponse, err := client.Zones.ListRecords(accountID, domain, nil)
+	options := &dnsimple.ZoneRecordListOptions{}
+	if changeRecord.Type != "" {
+		options.Type = changeRecord.Type
+	}
+	recordResponse, err := listRecords(client, accountID, domain, options)
 	if err != nil {
 		return 0, err
 	}
 	var id int64
-	for _, record := range recordResponse.Data {
+	for _, record := range recordResponse {
 		if record.Name == changeRecord.Name && record.Type == changeRecord.Type && record.Content == value {
 			id = record.ID
 			break
