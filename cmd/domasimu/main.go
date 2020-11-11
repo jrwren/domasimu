@@ -37,7 +37,10 @@ func main() {
 		fmt.Println("domasimu <domainname> will list records in the domain")
 		fmt.Println("")
 		fmt.Fprintln(os.Stderr, "domasimu config file example:")
-		toml.NewEncoder(os.Stderr).Encode(Config{"you@example.com", "TOKENHERE1234"})
+		err := toml.NewEncoder(os.Stderr).Encode(Config{"you@example.com", "TOKENHERE1234"})
+		if err != nil {
+			fmt.Println(err) // This is impossible, but errcheck lint. 😳
+		}
 	}
 	flag.Parse()
 
@@ -109,6 +112,10 @@ func main() {
 		} else {
 			fmt.Printf("record deleted with id %s\n", id)
 		}
+		return
+	}
+	if len(flag.Args()) == 0 {
+		flag.Usage()
 		return
 	}
 	options := &dnsimple.ZoneRecordListOptions{}
