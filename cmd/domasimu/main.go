@@ -1,4 +1,4 @@
-// Copyright © 2014 Jay R. Wren <jrwren@xmtp.net>.
+// Copyright © 2014-2020 Jay R. Wren <jrwren@xmtp.net>.
 //
 // Use of this source code is governed by an MIT-style
 // license that can be found in the LICENSE file.
@@ -96,7 +96,7 @@ func main() {
 	if *update != "" {
 		id, err := createOrUpdate(client, *update, accountID)
 		if err != nil {
-			fmt.Fprintln(os.Stderr, "could not get create or update:", err)
+			fmt.Fprintln(os.Stderr, "could not create or update:", err)
 		} else {
 			fmt.Printf("record written with id %s\n", id)
 		}
@@ -265,10 +265,12 @@ func createOrUpdate(client *dnsimple.Client, message string, accountID string) (
 	oldValue := pieces[3]
 	newRecord := changeRecord
 	newRecord.Content = pieces[4]
-	ttl, _ := strconv.Atoi(pieces[5])
+	ttl, err := strconv.Atoi(pieces[5])
+	if err != nil {
+		return "", fmt.Errorf("could not convert %s to int: %w", pieces[5], err)
+	}
 	newRecord.TTL = ttl
 	id, err := getRecordIDByValue(client, domain, oldValue, accountID, &changeRecord)
-
 	if err != nil {
 		return "", err
 	}
@@ -276,18 +278,19 @@ func createOrUpdate(client *dnsimple.Client, message string, accountID string) (
 	var respID string
 	if id == 0 {
 		zoneRecordResponse, err := client.Zones.CreateRecord(accountID, domain, newRecord)
+		if err != nil {
+			return "", err
+		}
 		respID = strconv.FormatInt(zoneRecordResponse.Data.ID, 10)
-
 		if err != nil {
 			return "", err
 		}
 	} else {
 		zoneRecordResponse, err := client.Zones.UpdateRecord(accountID, domain, id, newRecord)
-		respID = strconv.FormatInt(zoneRecordResponse.Data.ID, 10)
-
 		if err != nil {
 			return "", err
 		}
+		respID = strconv.FormatInt(zoneRecordResponse.Data.ID, 10)
 	}
 
 	return respID, nil
