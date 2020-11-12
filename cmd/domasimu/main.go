@@ -26,6 +26,7 @@ import (
 var verbose = flag.Bool("v", false, "Use verbose output")
 var list = flag.Bool("l", false, "List domains.")
 var update = flag.String("u", "", "Update or create record. The format is 'domain name type oldvalue newvlaue ttl'.\n(use - for oldvalue to create a new record)")
+var value = flag.String("value", "", "Alt value to use for create or update")
 var del = flag.String("d", "", "Delete record. The format is 'domain name type value'")
 var format = flag.String("f", "plain", "Output zones in {plain, json, table} format")
 var typeR = flag.String("t", "", "record type to query for")
@@ -35,6 +36,8 @@ func main() {
 		fmt.Fprintf(os.Stderr, "Usage of %s:\n", os.Args[0])
 		flag.PrintDefaults()
 		fmt.Println("domasimu <domainname> will list records in the domain")
+		fmt.Println("")
+		fmt.Println("domasimu -value='v=spf1 mx -all' -u 'example.com mail TXT - - 300' will add an SPF record")
 		fmt.Println("")
 		fmt.Fprintln(os.Stderr, "domasimu config file example:")
 		err := toml.NewEncoder(os.Stderr).Encode(Config{"you@example.com", "TOKENHERE1234"})
@@ -272,6 +275,9 @@ func createOrUpdate(client *dnsimple.Client, message string, accountID string) (
 	oldValue := pieces[3]
 	newRecord := changeRecord
 	newRecord.Content = pieces[4]
+	if *value != "" {
+		newRecord.Content = *value
+	}
 	ttl, err := strconv.Atoi(pieces[5])
 	if err != nil {
 		return "", fmt.Errorf("could not convert %s to int: %w", pieces[5], err)
