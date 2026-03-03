@@ -60,7 +60,7 @@ func main() {
 		flag.Usage()
 		return
 	}
-
+	ctx := context.Background()
 	_, token, err := getCreds()
 	if err != nil {
 		fmt.Fprintln(os.Stderr, "could not read config", err)
@@ -71,7 +71,7 @@ func main() {
 	tc := oauth2.NewClient(context.Background(), ts)
 
 	client := dnsimple.NewClient(tc)
-	whoamiResponse, err := client.Identity.Whoami()
+	whoamiResponse, err := client.Identity.Whoami(ctx)
 
 	if err != nil {
 		fmt.Fprintln(os.Stderr, "could not connect to dnsimple", err)
@@ -85,14 +85,14 @@ func main() {
 	accountID := strconv.FormatInt(whoamiResponse.Data.Account.ID, 10)
 
 	if *list {
-		domainsResponse, err := client.Domains.ListDomains(accountID, nil)
+		domainsResponse, err := client.Domains.ListDomains(ctx, accountID, nil)
 		if err != nil {
 			fmt.Fprintf(os.Stderr, "could not get domains %v\n", err)
 			return
 		}
 		for _, domain := range domainsResponse.Data {
 			if *verbose {
-				fmt.Println(domain.Name, domain.ExpiresOn)
+				fmt.Println(domain.Name, domain.ExpiresAt)
 			} else {
 				fmt.Println(domain.Name)
 			}
@@ -100,7 +100,7 @@ func main() {
 		return
 	}
 	if *update != "" {
-		id, err := createOrUpdate(client, *update, accountID)
+		id, err := createOrUpdate(ctx, client, *update, accountID)
 		if err != nil {
 			fmt.Fprintln(os.Stderr, "could not create or update:", err)
 		} else {
@@ -109,7 +109,7 @@ func main() {
 		return
 	}
 	if *del != "" {
-		id, err := deleteRecord(client, *del, accountID)
+		id, err := deleteRecord(ctx, client, *del, accountID)
 		if err != nil {
 			fmt.Fprintln(os.Stderr, "could not delete:", err)
 		} else {
@@ -123,9 +123,9 @@ func main() {
 	}
 	options := &dnsimple.ZoneRecordListOptions{}
 	if *typeR != `` {
-		options.Type = *typeR
+		options.Type = typeR
 	}
-	records, err := listRecords(client, accountID, flag.Args()[0], options)
+	records, err := listRecords(ctx, client, accountID, flag.Args()[0], options)
 	if err != nil {
 		fmt.Fprintln(os.Stderr, "could not get records:", err)
 	}
@@ -141,23 +141,23 @@ func main() {
 }
 
 // listRecords pages through records
-func listRecords(client *dnsimple.Client, accountID, domain string,
+func listRecords(ctx context.Context, client *dnsimple.Client, accountID, domain string,
 	options *dnsimple.ZoneRecordListOptions) (records zoneRecords, err error) {
 	if options == nil {
 		options = &dnsimple.ZoneRecordListOptions{}
 	}
 	for p := 1; ; p++ {
-		listZoneRecordsResponse, err := client.Zones.ListRecords(accountID, domain, options)
+		listZoneRecordsResponse, err := client.Zones.ListRecords(ctx, accountID, domain, options)
 		if err != nil {
 			return nil, err
 		}
 		for i := range listZoneRecordsResponse.Data {
 			records = append(records, listZoneRecordsResponse.Data[i])
 		}
-		if options.Page == 0 {
-			options.Page = 2
+		if *options.Page == 0 {
+			*options.Page = 2
 		} else {
-			options.Page++
+			*options.Page++
 		}
 		if p >= listZoneRecordsResponse.Pagination.TotalPages {
 			break
@@ -261,15 +261,15 @@ type Config struct {
 	Token string
 }
 
-func createOrUpdate(client *dnsimple.Client, message string, accountID string) (string, error) {
+func createOrUpdate(ctx context.Context, client *dnsimple.Client, message string, accountID string) (string, error) {
 	pieces := strings.Split(message, " ")
 	if len(pieces) != 6 {
 		return "", fmt.Errorf("expected space seperated domain, name, type, oldvalue, newvalue, ttl")
 	}
 
 	domain := pieces[0]
-	changeRecord := dnsimple.ZoneRecord{
-		Name: pieces[1],
+	changeRecord := dnsimple.ZoneRecordAttributes{
+		Name: new(pieces[1]),
 		Type: pieces[2],
 	}
 	oldValue := pieces[3]
@@ -283,23 +283,20 @@ func createOrUpdate(client *dnsimple.Client, message string, accountID string) (
 		return "", fmt.Errorf("could not convert %s to int: %w", pieces[5], err)
 	}
 	newRecord.TTL = ttl
-	id, err := getRecordIDByValue(client, domain, oldValue, accountID, &changeRecord)
+	id, err := getRecordIDByValue(ctx, client, domain, oldValue, accountID, &changeRecord)
 	if err != nil {
 		return "", err
 	}
 
 	var respID string
 	if id == 0 {
-		zoneRecordResponse, err := client.Zones.CreateRecord(accountID, domain, newRecord)
+		zoneRecordResponse, err := client.Zones.CreateRecord(ctx, accountID, domain, newRecord)
 		if err != nil {
 			return "", err
 		}
 		respID = strconv.FormatInt(zoneRecordResponse.Data.ID, 10)
-		if err != nil {
-			return "", err
-		}
 	} else {
-		zoneRecordResponse, err := client.Zones.UpdateRecord(accountID, domain, id, newRecord)
+		zoneRecordResponse, err := client.Zones.UpdateRecord(ctx, accountID, domain, id, newRecord)
 		if err != nil {
 			return "", err
 		}
@@ -309,42 +306,43 @@ func createOrUpdate(client *dnsimple.Client, message string, accountID string) (
 	return respID, nil
 }
 
-func deleteRecord(client *dnsimple.Client, message, accountID string) (string, error) {
+func deleteRecord(ctx context.Context, client *dnsimple.Client, message, accountID string) (string, error) {
 	pieces := strings.Split(message, " ")
 	if len(pieces) != 4 {
 		return "", fmt.Errorf("expected space seperated domain, name, type, value")
 	}
 	domain := pieces[0]
-	changeRecord := dnsimple.ZoneRecord{
-		Name: pieces[1],
+	changeRecord := dnsimple.ZoneRecordAttributes{
+		Name: new(pieces[1]),
 		Type: pieces[2],
 	}
 	value := pieces[3]
-	id, err := getRecordIDByValue(client, domain, value, accountID, &changeRecord)
+	id, err := getRecordIDByValue(ctx, client, domain, value, accountID, &changeRecord)
 	if err != nil {
 		return "", err
 	}
 	if id == 0 {
 		return "", fmt.Errorf("could not find record")
 	}
-	_, err = client.Zones.DeleteRecord(accountID, domain, id)
+	_, err = client.Zones.DeleteRecord(ctx, accountID, domain, id)
 	respID := strconv.FormatInt(id, 10)
 
 	return respID, err
 }
 
-func getRecordIDByValue(client *dnsimple.Client, domain, value, accountID string, changeRecord *dnsimple.ZoneRecord) (int64, error) {
+func getRecordIDByValue(ctx context.Context, client *dnsimple.Client, domain, value, accountID string,
+	changeRecord *dnsimple.ZoneRecordAttributes) (int64, error) {
 	options := &dnsimple.ZoneRecordListOptions{}
 	if changeRecord.Type != "" {
-		options.Type = changeRecord.Type
+		options.Type = new(changeRecord.Type)
 	}
-	recordResponse, err := listRecords(client, accountID, domain, options)
+	recordResponse, err := listRecords(ctx, client, accountID, domain, options)
 	if err != nil {
 		return 0, err
 	}
 	var id int64
 	for _, record := range recordResponse {
-		if record.Name == changeRecord.Name && record.Type == changeRecord.Type && record.Content == value {
+		if record.Name == *changeRecord.Name && record.Type == changeRecord.Type && record.Content == value {
 			id = record.ID
 			break
 		}
